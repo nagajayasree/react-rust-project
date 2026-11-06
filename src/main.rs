@@ -1,7 +1,11 @@
+mod error;
 mod handlers;
 mod models;
 
 use std::str::FromStr;
+
+use axum::http::HeaderValue;
+use tower_http::cors::{Any, CorsLayer};
 
 use axum::{routing::get, Json, Router};
 use serde_json::{json, Value};
@@ -26,20 +30,30 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
+    let cors = CorsLayer::new()
+    .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+    .allow_methods(Any)
+    .allow_headers(Any);
+
     // 3. Routes
     let app = Router::new()
-        .route("/health", get(health))
-        .route(
-            "/applications",
-            get(handlers::list_applications).post(handlers::create_application),
-        )
-        .route(
-            "/applications/{id}",
-            get(handlers::get_application)
-                .put(handlers::update_application)
-                .delete(handlers::delete_application),
-        )
-        .with_state(pool); // every handler can now use State<SqlitePool>
+    .route("/health", get(health))
+    .route(
+        "/applications",
+        get(handlers::list_applications).post(handlers::create_application),
+    )
+    .route(
+        "/applications/{id}",
+        get(handlers::get_application)
+            .put(handlers::update_application)
+            .delete(handlers::delete_application),
+    )
+    .route(
+        "/applications/{id}/status",
+        axum::routing::patch(handlers::update_status),
+    )
+    .layer(cors)
+    .with_state(pool);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
